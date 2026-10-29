@@ -49,6 +49,7 @@ test('release includes runtime, preload, server and dashboard assets inside app.
     'main.js',
     'runtime-config.js',
     'http-app.js',
+    'local-tls.js',
     'preload.js',
     'public/**/*',
     'dist/**/*',
@@ -64,6 +65,13 @@ test('release includes runtime, preload, server and dashboard assets inside app.
   assert.match(main, /getAppAssetPath\('preload\.js'\)/);
   assert.match(main, /icon:\s*APP_ICON_PATH/);
   assert.match(main, /getAppAssetPath\('dist', 'index\.html'\)/);
+  assert.match(main, /\/mobile\/#token=/);
+  assert.ok(main.includes('mobileAddress: `https://${localIP}:${PORT}/mobile/`'));
+  const dashboardHtml = fs.readFileSync(path.join(desktopDirectory, 'index.html'), 'utf8');
+  const viteConfig = fs.readFileSync(path.join(desktopDirectory, 'vite.config.mjs'), 'utf8');
+  assert.match(dashboardHtml, /<script type="module" src="\.\/app-dashboard\.js"><\/script>/);
+  assert.match(dashboardHtml, /<script type="module" src="\.\/pairing-ui\.js"><\/script>/);
+  assert.match(viteConfig, /root: path\.resolve\(__dirname, 'src'\)/);
   assert.match(main, /getAppAssetPath\('public', 'mobile'\)/);
   assert.match(main, /userDataPath:\s*app\.getPath\('userData'\)/);
   assert.doesNotMatch(main, /loadURL\(DASHBOARD_DEV_URL\)\s*;[\s\S]*?app\.isPackaged/);
@@ -78,7 +86,7 @@ test('dashboard build inputs use local relative assets and Windows icon is valid
 
   const buildScript = fs.readFileSync(path.join(desktopDirectory, 'build-dashboard.js'), 'utf8');
   assert.match(buildScript, /replaceAll\('\.\.\/assets\//);
-  assert.match(buildScript, /copyFile\(path\.join\(source, 'pairing-ui\.js'\)/);
+  assert.match(buildScript, /copyAsset\('pairing-ui\.js'\)/);
   assert.match(buildScript, /path\.join\(output, 'mobile'\)/);
 
   const icon = fs.readFileSync(path.join(desktopDirectory, 'build', 'app-icon.ico'));

@@ -18,6 +18,8 @@ test('mobile page stacks the camera and photo actions and removes the old icon t
   const mobileScript = fs.readFileSync(path.join(__dirname, '..', 'public', 'mobile', 'mobile.js'), 'utf8');
   assert.match(mobileScript, /Secure connection required/);
   assert.match(page, /accept="image\/jpeg,image\/png,image\/webp"/);
+  assert.match(page, /viewport-fit=cover/);
+  assert.doesNotMatch(page, /user-scalable=no|maximum-scale=/);
 });
 
 test('mobile action panel remains in the document flow and the page can scroll on short viewports', () => {
@@ -34,6 +36,8 @@ test('mobile action panel remains in the document flow and the page can scroll o
   assert.match(actionsStyles, /position:\s*relative/);
   assert.doesNotMatch(actionsStyles, /position:\s*fixed|position:\s*absolute/);
   assert.doesNotMatch(page, /\.camera-switch|position:\s*fixed[^}]*\.capture-actions/);
+  assert.match(page, /env\(safe-area-inset-bottom\)/);
+  assert.match(page, /min-height:\s*3\.25rem/);
 });
 
 test('the receiver page and every referenced browser asset are available over HTTP', async (context) => {
@@ -46,6 +50,8 @@ test('the receiver page and every referenced browser asset are available over HT
   const baseUrl = `http://127.0.0.1:${server.address().port}/mobile/`;
   const pageResponse = await fetch(baseUrl);
   assert.equal(pageResponse.status, 200);
+  const canonicalResponse = await fetch(baseUrl.slice(0, -1));
+  assert.equal(canonicalResponse.status, 200);
   assert.match(pageResponse.headers.get('content-type'), /text\/html/);
   const page = await pageResponse.text();
   const assetPaths = [...page.matchAll(/(?:src|href)="(?:\.\/)?([^"?#]+)"/g)]

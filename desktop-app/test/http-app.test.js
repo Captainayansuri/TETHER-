@@ -134,6 +134,10 @@ test('no HTTP route lists or serves captures, including traversal attempts', asy
 
 test('public mobile and status endpoints receive security headers', async (context) => {
   await withServer(context, async (baseUrl) => {
+    const shortMobileResponse = await fetch(`${baseUrl}/mobile`, { redirect: 'manual' });
+    assert.equal(shortMobileResponse.status, 301);
+    assert.equal(shortMobileResponse.headers.get('location'), '/mobile/');
+
     const mobileResponse = await fetch(`${baseUrl}/mobile/`);
     assert.equal(mobileResponse.status, 200);
     assert.match(mobileResponse.headers.get('content-security-policy'), /object-src 'none'/);

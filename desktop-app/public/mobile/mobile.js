@@ -49,7 +49,7 @@ if (window.location.hash) {
 }
 
 // Determine WebSocket address dynamically
-// Standard mobile URL: http://<ip>:8080/mobile -> ws://<ip>:8080
+// TETHER serves this page over HTTPS and connects its receiver using WSS.
 const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
 const wsHost = window.location.host;
 const wsUrl = `${wsProtocol}//${wsHost}`;

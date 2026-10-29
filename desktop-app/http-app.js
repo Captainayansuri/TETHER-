@@ -35,7 +35,7 @@ function createHttpApp({
     dotfiles: 'deny',
     fallthrough: true,
     index: ['index.html'],
-    redirect: false
+    redirect: true
   }));
 
   app.get('/status', (req, res) => {

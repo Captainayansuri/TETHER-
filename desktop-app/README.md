@@ -80,7 +80,7 @@ silently falling back. Environment overrides use the `TETHER_` prefix:
 
 | Setting | Environment override | Development / production default | Test default |
 | --- | --- | ---: | ---: |
-| HTTP and WebSocket server port | `TETHER_PORT` | 8080 | 0 (ephemeral) |
+| HTTPS and WebSocket server port | `TETHER_PORT` | 8080 | 0 (ephemeral) |
 | Vite dashboard development port | `TETHER_DASHBOARD_DEV_PORT` | 5173 | 5173 |
 | Maximum image size | `TETHER_MAX_IMAGE_BYTES` | 32 MiB | 32 MiB |
 | Pairing token lifetime | `TETHER_PAIRING_TOKEN_TTL_MS` | 30 minutes | 1 minute |
@@ -160,17 +160,103 @@ Payloads are sent in acknowledged 1 MiB chunks, so Android's WebSocket send
 queue remains bounded and an interrupted upload can discard its partial
 temporary file before a same-ID retry.
 
-The current local server uses HTTP/WebSocket (`ws://`) by default. The
-challenge-response prevents passive observers from learning the reusable token,
-but image data and other WebSocket traffic are not encrypted. Use a trusted
-network; confidentiality and protection from an active local-network attacker
-require trusted HTTPS/WSS certificates, which this app does not currently
-provision.
+## Pairing an Android phone
+
+The local server serves the mobile receiver over HTTPS and accepts image
+transfers over WSS. On Windows, TETHER creates a per-user local certificate
+authority and a server certificate for the current local IPv4 interfaces. The
+CA key is non-exportable and stored in the Windows Current User certificate
+store with an ACL limited to that Windows account and SYSTEM. The per-user
+`userData\tls` directory retains its inherited Windows AppData permissions; it
+contains only the public CA export, CA thumbprint/version metadata, and a
+short-lived password-protected server PFX that is removed after it is loaded.
+The dashboard shows the current HTTPS
+`IP:port`, CA SHA-256 fingerprint, server certificate expiry and SAN values,
+and Android SPKI pin. The QR code uses the current LAN address and includes the
+short-lived browser pairing token in its URL fragment.
+
+For Android Chrome, install the exported CA before opening the QR code:
+
+1. On the desktop dashboard, choose **Export Trust Certificate** and save the
+   `.cer` file.
+2. Transfer that certificate file to the phone. In Android Settings, search
+   for **Install a certificate** or **CA certificate**; menu names vary by
+   Android version and device manufacturer. Select the **CA certificate**
+   option, not a Wi-Fi certificate option.
+3. Compare the certificate's SHA-256 fingerprint with the value shown in the
+   TETHER desktop window through a trusted channel (for example, read the
+   fingerprint directly from that screen while viewing the phone). Do not rely
+   only on downloading the certificate from the same LAN. Android warns that
+   a user CA can authorize inspection of HTTPS traffic on the phone. Install
+   only this TETHER CA on a device you control, and remove it when you stop
+   using TETHER.
+4. Open the current dashboard QR code in Chrome. Do not bypass a certificate
+   warning. The dashboard's certificate diagnostics show the expected SAN IP
+   values and expiry dates; the address opened in Chrome must match an IP SAN.
+   If Chrome reports an authority error, check that Android imported the CA as
+   a user CA and compare the CA fingerprint again.
+
+Chrome trust is local to the phone and cannot be confirmed remotely by TETHER.
+The desktop dashboard reports whether its certificate is present, unexpired,
+and matches the advertised URL, then explains the corresponding browser error:
+
+- `NET::ERR_CERT_AUTHORITY_INVALID`: stop; verify the fingerprint and confirm
+  Android installed the certificate as a CA credential.
+- `NET::ERR_CERT_COMMON_NAME_INVALID`: use the current QR/address and check
+  that its IP is listed in the dashboard SAN details. Refresh the pairing card
+  after the PC changes networks so TETHER can renew the leaf certificate.
+- A certificate expiry or TLS setup diagnostic: restart TETHER and check the
+  desktop startup log and Windows clock; do not bypass the browser warning.
+- A connection timeout after Chrome accepts the certificate: check same-Wi-Fi
+  reachability, guest-network isolation, and a Windows Firewall inbound rule
+  for TETHER on the Private profile, current TCP port, and `LocalSubnet` only.
+  Check the active policy with `netsh advfirewall show currentprofile`. If it
+  reports `LocalFirewallRules N/A (GPO-store only)`, local firewall exceptions
+  are not merged; ask the administrator to add the scoped rule through policy.
+  Do not disable the firewall or open TETHER on the Public profile.
+
+For the native Android app, install the same CA certificate, then enter the
+current `IP:port`, pairing token, and Android certificate pin shown on the
+dashboard. The app requires WSS and checks the pin; cleartext traffic is
+disabled. The Android network security configuration trusts user-added CAs for
+this app, while OkHttp's certificate pin restricts the TETHER WebSocket
+connection.
+
+The server listens on `0.0.0.0` so another device on the LAN can reach it.
+When Windows Firewall asks, allow TETHER/Electron on **Private networks**. If
+the prompt was dismissed, open Windows Security → Firewall & network protection
+→ Allow an app through firewall and enable the TETHER app for the Private
+profile only. Keep the phone and desktop on the same Wi-Fi/LAN and check that
+the dashboard's current address belongs to that network; guest Wi-Fi client
+isolation or VPN routing can prevent devices from reaching one another.
+
+The certificate authority is reused across ordinary desktop restarts; the
+server certificate is reissued for the current LAN address and refreshed before
+expiry without closing active WebSocket sessions. A one-time CA migration
+applies non-exportable key storage and a restricted Windows key ACL; it changes
+the CA fingerprint, so remove the old TETHER user CA from Android and install
+the newly fingerprint-verified certificate. Later ordinary leaf renewals do
+not require reinstalling the CA or changing the native Android CA pin. Pairing
+tokens remain temporary and must be refreshed when expired or after a desktop
+restart.
+
+### Resetting TETHER certificate trust
+
+To revoke this desktop's trust on a phone, remove the TETHER entry under
+Android **User credentials** (the exact Settings labels vary by manufacturer).
+On Windows, close TETHER, open `certmgr.msc`, and remove **TETHER Local Root CA**
+from **Current User > Personal > Certificates**. In TETHER's per-user
+`userData\tls` directory, remove `root-thumbprint.txt` and
+`root-security-version.txt`, then restart TETHER. It will create a new CA and
+show a new fingerprint; transfer the fresh public `.cer` and compare its
+fingerprint through a trusted channel before installing it. If an old CA entry
+is still present on Android, remove it before trusting the replacement. This
+reset invalidates old server certificates and may require re-pairing clients.
 
 ## Graceful shutdown
 
 Electron quit, non-macOS last-window close, `SIGINT`, and `SIGTERM` share one
-shutdown path. It stops accepting new HTTP/WebSocket connections, sends
+shutdown path. It stops accepting new HTTPS/WebSocket connections, sends
 connected clients a `server_shutdown` notice, stops new upload-queue admission,
 and lets admitted transfers finish within `TETHER_SHUTDOWN_TIMEOUT_MS`.
 Outstanding transfer receivers then finish safe writes and remove incomplete

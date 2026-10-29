@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>TETHER</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -31,6 +31,7 @@
       height: 100vh;
       height: 100dvh;
       min-height: 100svh;
+      padding-bottom: env(safe-area-inset-bottom);
       overflow-x: hidden;
       overflow-y: auto;
       display: flex;
@@ -66,7 +67,7 @@
       align-items: center;
       justify-content: center;
       gap: 1rem;
-      padding: 1rem;
+      padding: 1rem 1rem calc(1rem + env(safe-area-inset-bottom));
       overflow: hidden;
     }
 
@@ -139,7 +140,7 @@
       font-weight: 600;
       cursor: pointer;
       width: 100%;
-      min-height: 3rem;
+      min-height: 3.25rem;
     }
 
     .btn-secondary:disabled {
@@ -200,7 +201,7 @@
 
     .transfer-progress {
       position: absolute;
-      bottom: 148px;
+      bottom: calc(148px + env(safe-area-inset-bottom));
       left: 1rem;
       right: 1rem;
       z-index: 15;
@@ -226,7 +227,7 @@
     /* Toast Notifications */
     .toast-msg {
       position: absolute;
-      bottom: 160px;
+      bottom: calc(160px + env(safe-area-inset-bottom));
       left: 50%;
       transform: translateX(-50%);
       background: rgba(52, 211, 153, 0.95);

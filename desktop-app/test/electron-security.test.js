@@ -110,11 +110,43 @@ test('Electron main and preload keep renderer privileges constrained', () => {
   assert.match(preload, /copyImage: \(filename\) => ipcRenderer\.invoke\('copy-image', \{ filename \}\)/);
   assert.match(main, /ipcMain\.handle\('copy-image'/);
   assert.match(main, /https\.createServer\(/);
+  assert.match(main, /await new Promise\(\(resolve, reject\) =>/);
+  assert.match(main, /httpServer\.listen\(portToTry, '0\.0\.0\.0'/);
   assert.match(main, /setCertificateVerifyProc/);
+  assert.match(main, /setSecureContext/);
+  assert.match(main, /mobileAddress:/);
+  assert.match(main, /certificateExpiresAt:/);
+  assert.match(main, /certificateAuthorityExpiresAt:/);
+  assert.match(main, /certificateSubjectAlternativeNames:/);
+  assert.match(main, /isLocalTlsMaterialCurrent\(localTlsMaterial, address\)/);
+  assert.match(main, /selectLanIPv4Address/);
   assert.match(main, /export-local-trust-certificate/);
   assert.match(main, /https:\/\/\$\{localIP\}:\$\{PORT\}\/mobile/);
+  assert.match(main, /mobileAddress: `https:\/\/\$\{localIP\}:\$\{PORT\}\/mobile\//);
+  assert.match(main, /startupStage = 'storage\.recovery'/);
+  assert.match(main, /startupStage = 'server\.start'/);
+  assert.match(main, /application\.startup_failed/);
+  assert.match(main, /dialog\.showErrorBox\(/);
+  for (const channel of ['copy-image', 'save-image', 'select-directory']) {
+    assert.equal((main.match(new RegExp(`ipcMain\\.handle\\('${channel}'`, 'g')) || []).length, 1);
+  }
   assert.match(preload, /exportLocalTrustCertificate: \(\) => ipcRenderer\.invoke\('export-local-trust-certificate'\)/);
   assert.match(dashboardAdapter, /Export Trust Certificate/);
+  assert.match(dashboardAdapter, /Install a certificate/);
+  assert.match(dashboardAdapter, /Never bypass a Chrome warning/);
+  assert.match(dashboardAdapter, /trusted channel/);
+  assert.match(dashboardAdapter, /User credentials/);
+  assert.match(dashboardAdapter, /NET::ERR_CERT_AUTHORITY_INVALID/);
+  assert.match(dashboardAdapter, /NET::ERR_CERT_COMMON_NAME_INVALID/);
+  assert.match(dashboardAdapter, /does not match the certificate SAN/);
+  assert.match(dashboardAdapter, /that trust cannot be checked from the desktop/);
+  assert.match(dashboardAdapter, /certificate or local CA has expired/);
+  assert.match(dashboardAdapter, /loopback addresses cannot be opened from a phone/);
+  assert.match(dashboardAdapter, /pairing-tls-status/);
+  assert.match(dashboardAdapter, /Group Policy/);
+  assert.match(dashboardAdapter, /LocalSubnet/);
+  assert.match(dashboardAdapter, /pairing-tls-sans/);
+  assert.match(dashboardAdapter, /config\.mobileAddress/);
   assert.match(dashboardAdapter, /certificatePin/);
   assert.match(tlsHelper, /New-SelfSignedCertificate/);
   assert.ok(packageManifest.build.files.includes('local-tls.js'));
@@ -138,6 +170,8 @@ test('shipped gallery bounds retained captures and cleans up IPC subscriptions a
   );
 
   assert.match(bundle, /slice\(0,200\)/);
+  assert.match(bundle, /const url='https:\/\/'\+e\.ip\+':'\+e\.port\+'\/mobile\/#token='/);
+  assert.doesNotMatch(bundle, /const url='http:\/\/'\+e\.ip\+':'\+e\.port\+'\/mobile\/#token='/);
   assert.match(bundle, /x\.captureId!==c\.captureId/);
   assert.match(bundle, /src:u\.url\|\|u\.base64,alt:"Active capture"/);
   assert.match(bundle, /unsubs\.push\(window\.electronAPI\.onClientConnected/);

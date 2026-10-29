@@ -191,9 +191,11 @@
       card.querySelector('.pairing-auth-error')?.remove();
       const qrCode = card.querySelector('.qr-image');
       if (qrCode && qrCode.src !== config.qrCode) qrCode.src = config.qrCode;
+      const serverAddress = card.querySelector('.ip-text');
+      if (serverAddress && config.mobileAddress) serverAddress.textContent = config.mobileAddress;
       const instructions = card.querySelectorAll('p');
       if (instructions.length > 0) {
-        instructions[0].textContent = 'Browser: scan QR; Android app: import the TETHER trust certificate, then enter the token and certificate pin.';
+        instructions[0].textContent = 'Android Chrome: install and verify the TETHER CA once, then scan the QR. It opens this HTTPS URL with the temporary pairing token. Native Android: install the CA, then enter the IP:port from Device Details, pairing token, and pin.';
       }
 
       let details = card.querySelector('.pairing-auth-details');
@@ -227,6 +229,12 @@
         trust = document.createElement('div');
         trust.className = 'pairing-tls-details';
         trust.style.cssText = 'margin-top:0.5rem;font-size:0.75rem;color:var(--text-muted);';
+        const status = document.createElement('p');
+        status.className = 'pairing-tls-status';
+        status.setAttribute('role', 'status');
+        status.setAttribute('aria-live', 'polite');
+        status.style.cssText = 'margin:0.35rem 0;line-height:1.4;';
+        trust.appendChild(status);
         const fingerprintLabel = document.createElement('p');
         fingerprintLabel.textContent = 'TETHER trust certificate SHA-256 fingerprint';
         trust.appendChild(fingerprintLabel);
@@ -242,6 +250,14 @@
         pin.className = 'pairing-tls-pin';
         pin.style.cssText = 'display:block;margin-top:0.25rem;overflow-wrap:anywhere;user-select:text;';
         trust.appendChild(pin);
+        const expiry = document.createElement('p');
+        expiry.className = 'pairing-tls-expiry';
+        expiry.style.marginTop = '0.5rem';
+        trust.appendChild(expiry);
+        const sans = document.createElement('p');
+        sans.className = 'pairing-tls-sans';
+        sans.style.cssText = 'margin-top:0.25rem;overflow-wrap:anywhere;';
+        trust.appendChild(sans);
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'btn-primary';
@@ -263,13 +279,53 @@
         });
         trust.appendChild(button);
         const guidance = document.createElement('p');
-        guidance.textContent = 'Import this .cer as a CA certificate on the phone. Android app traffic also requires the pin above.';
-        guidance.style.cssText = 'margin-top:0.35rem;line-height:1.4;';
+        guidance.textContent = 'First-time Android Chrome setup: export this public .cer and transfer it to the phone (USB or another trusted method). Before installing, compare its SHA-256 fingerprint with this value on the TETHER desktop screen through a trusted channel; do not rely on a certificate downloaded from the same untrusted network. In Android Settings, search for "Install a certificate" and select "CA certificate" (menu names vary by phone). Android will warn that a user CA can authorize inspection of HTTPS traffic on the phone. Trust only this TETHER CA on a device you control, and remove it when you stop using TETHER. After installation, open the displayed HTTPS URL in Chrome. NET::ERR_CERT_AUTHORITY_INVALID means the CA is missing, installed under the wrong certificate type, or its fingerprint does not match; stop and verify it. NET::ERR_CERT_COMMON_NAME_INVALID means the URL host does not match the displayed SAN; use the current QR/address after TETHER refreshes the LAN certificate. Never bypass a Chrome warning. To reset trust, remove the TETHER entry under Android User credentials, remove the matching TETHER Local Root CA from Windows Current User > Personal, delete tls\\root-thumbprint.txt and tls\\root-security-version.txt in TETHER userData, then restart TETHER and verify/install the new fingerprint. The native Android app also needs the displayed certificate pin. If Chrome times out, check that both devices share the same Wi-Fi and allow TETHER on the Windows Firewall Private profile for the current TCP port, scoped to LocalSubnet. If Windows says local rules are controlled by Group Policy, ask the administrator to add that narrow allow rule; do not open the Public profile.';
+        guidance.style.cssText = 'margin-top:0.35rem;line-height:1.4;text-align:left;';
         trust.appendChild(guidance);
         card.appendChild(trust);
       }
       trust.querySelector('.pairing-tls-fingerprint').textContent = config.certificateFingerprint || 'Unavailable';
       trust.querySelector('.pairing-tls-pin').textContent = config.certificatePin || 'Unavailable';
+      const addressHost = (() => {
+        try { return new URL(config.mobileAddress).hostname; } catch { return ''; }
+      })();
+      const hostIsInSan = Boolean(addressHost &&
+        (config.certificateSubjectAlternativeNames || '').split(',').some((entry) => {
+          const san = entry.match(/^\s*IP Address\s*=\s*(.+?)\s*$/i);
+          return san && san[1] === addressHost;
+        }));
+      const serverExpiryMs = Date.parse(config.certificateExpiresAt || '');
+      const caExpiryMs = Date.parse(config.certificateAuthorityExpiresAt || '');
+      const tlsStatus = trust.querySelector('.pairing-tls-status');
+      let tlsStatusText = 'Local TLS certificate data is unavailable. Restart TETHER and check its startup diagnostics.';
+      let tlsStatusColor = 'var(--danger-color)';
+      if (!config.certificateFingerprint || !config.certificatePin ||
+          !Number.isFinite(serverExpiryMs) || !Number.isFinite(caExpiryMs)) {
+        // Keep the unavailable diagnostic above.
+      } else if (serverExpiryMs <= Date.now() || caExpiryMs <= Date.now()) {
+        tlsStatusText = 'The server certificate or local CA has expired. Restart TETHER to renew it before pairing.';
+      } else if (addressHost === '127.0.0.1' || addressHost === '::1' || addressHost.toLowerCase() === 'localhost') {
+        tlsStatusText = 'No LAN address was selected. Connect this PC to Wi-Fi or Ethernet, then refresh the pairing details; loopback addresses cannot be opened from a phone.';
+      } else if (!hostIsInSan) {
+        tlsStatusText = 'The advertised URL host does not match the certificate SAN. Refresh the pairing details and use the current QR code.';
+      } else {
+        tlsStatusText = 'The server certificate is current and matches this URL. Android Chrome must still trust the TETHER CA; that trust cannot be checked from the desktop.';
+        tlsStatusColor = 'var(--accent-success)';
+      }
+      tlsStatus.textContent = tlsStatusText;
+      tlsStatus.style.color = tlsStatusColor;
+      trust.querySelector('.pairing-tls-expiry').textContent =
+        `Server certificate expires ${config.certificateExpiresAt ? new Date(config.certificateExpiresAt).toLocaleString() : 'unavailable'}; local CA expires ${config.certificateAuthorityExpiresAt ? new Date(config.certificateAuthorityExpiresAt).toLocaleDateString() : 'unavailable'}.`;
+      trust.querySelector('.pairing-tls-sans').textContent =
+        `Certificate names: ${config.certificateSubjectAlternativeNames || 'unavailable'}`;
+      let rotationNotice = trust.querySelector('.pairing-tls-rotation');
+      if (config.certificateAuthorityRotated && !rotationNotice) {
+        rotationNotice = document.createElement('p');
+        rotationNotice.className = 'pairing-tls-rotation';
+        rotationNotice.style.cssText = 'margin-top:0.5rem;color:var(--danger-color);';
+        rotationNotice.textContent = 'The local CA was replaced for stronger Windows key protection, expiry, or reset. Remove the old TETHER user CA from Android and install this newly fingerprint-verified certificate.';
+        trust.insertBefore(rotationNotice, trust.firstChild);
+      }
     } catch {
       let error = card.querySelector('.pairing-auth-error');
       if (!error) {

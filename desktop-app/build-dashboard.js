@@ -28,12 +28,10 @@ async function build() {
   if (result.error) throw result.error;
   if (result.status !== 0) process.exitCode = result.status || 1;
   if (result.status === 0) {
-    const builtPage = path.join(output, 'src', 'index.html');
+    const builtPage = path.join(output, 'index.html');
     let html = await fs.readFile(builtPage, 'utf8');
     html = html.replaceAll('../assets/', './assets/');
     await fs.writeFile(path.join(output, 'index.html'), html);
-    await fs.rm(path.join(output, 'src'), { recursive: true, force: true });
-    await fs.copyFile(path.join(source, 'pairing-ui.js'), path.join(output, 'pairing-ui.js'));
     await fs.cp(path.join(source, 'mobile'), path.join(output, 'mobile'), { recursive: true });
   }
 }

@@ -58,11 +58,17 @@ const {
   createThumbnailCache
 } = require('./image-thumbnails');
 const { copyCaptureImage } = require('./copy-capture-image');
-const { createLocalTlsMaterial, listLocalIPv4Addresses } = require('./local-tls');
+const {
+  createLocalTlsMaterial,
+  isLocalTlsMaterialCurrent,
+  listLocalIPv4Addresses,
+  selectLanIPv4Address
+} = require('./local-tls');
 
 let mainWindow;
 let httpServer;
 let localTlsMaterial;
+let localTlsRefreshPromise;
 let wss;
 let heartbeatTimer;
 let shuttingDown = false;
@@ -135,24 +141,23 @@ function queueGalleryUpdate({ captureId, filename, path: filepath, mimeType, siz
   });
   return galleryUpdateQueue;
 }
-
 function getLocalIP() {
-  const interfaces = os.networkInterfaces();
-  for (const name of Object.keys(interfaces)) {
-    for (const iface of interfaces[name]) {
-      if (iface.family === 'IPv4' && !iface.internal) {
-        return iface.address;
-      }
-    }
-  }
-  return '127.0.0.1';
+  return selectLanIPv4Address(os.networkInterfaces());
 }
 
 async function createServer() {
-  const localIP = getLocalIP();
+  const interfaces = os.networkInterfaces();
+  const localIP = selectLanIPv4Address(interfaces);
   localTlsMaterial = await createLocalTlsMaterial({
     userDataPath: app.getPath('userData'),
-    addresses: listLocalIPv4Addresses(os.networkInterfaces())
+    addresses: listLocalIPv4Addresses(interfaces, localIP)
+  });
+  logger.info('tls.local_certificate_ready', {
+    rootFingerprint: localTlsMaterial.rootFingerprint,
+    rootNotAfter: localTlsMaterial.rootNotAfter,
+    leafFingerprint: localTlsMaterial.leafFingerprint,
+    leafNotAfter: localTlsMaterial.leafNotAfter,
+    subjectAlternativeNames: localTlsMaterial.subjectAlternativeNames
   });
   const expressApp = createHttpApp({
     mobileStaticPath: getAppAssetPath('public', 'mobile'),
@@ -164,11 +169,14 @@ async function createServer() {
   });
 
   // Pairing pages and WebSockets share a TLS-protected local-network listener.
-  httpServer = https.createServer({
-    pfx: localTlsMaterial.pfx,
-    passphrase: localTlsMaterial.pfxPassphrase
-  }, expressApp);
-  localTlsMaterial.pfx.fill(0);
+  try {
+    httpServer = https.createServer({
+      pfx: localTlsMaterial.pfx,
+      passphrase: localTlsMaterial.pfxPassphrase
+    }, expressApp);
+  } finally {
+    localTlsMaterial.pfx.fill(0);
+  }
 
   // Initialize WebSocket server on the same HTTP server port
   wss = new WebSocketServer({
@@ -379,37 +387,87 @@ async function createServer() {
   });
 
   let portFallbackCount = 0;
-  const listenOnPort = (portToTry) => {
-    httpServer.listen(portToTry, '0.0.0.0', () => {
-      PORT = httpServer.address().port;
-      logger.info('server.started', { port: PORT });
-    });
-  };
-
-  httpServer.on('error', (err) => {
-    if (shuttingDown) {
-      logger.warn('server.start_cancelled', {
-        errorCode: err.code || err.name || 'UNKNOWN'
-      });
-      return;
-    }
-    if (err.code === 'EADDRINUSE' &&
-        PORT < 65535 &&
-        portFallbackCount < APP_CONFIG.portFallbackAttempts) {
-      portFallbackCount++;
-      PORT++;
-      logger.warn('server.port_in_use', { port: PORT, attempt: portFallbackCount });
-      listenOnPort(PORT);
-    } else {
-      logger.error('server.start_failed', {
-        errorCode: err.code || err.name || 'UNKNOWN',
-        port: PORT
-      });
-    }
-  });
-
   httpServer.once('close', () => clearInterval(heartbeatTimer));
-  listenOnPort(PORT);
+  await new Promise((resolve, reject) => {
+    let startupSettled = false;
+    const listenOnPort = (portToTry) => {
+      httpServer.listen(portToTry, '0.0.0.0', () => {
+        PORT = httpServer.address().port;
+        logger.info('server.started', { port: PORT });
+        startupSettled = true;
+        resolve();
+      });
+    };
+
+    httpServer.on('error', (err) => {
+      if (shuttingDown) {
+        logger.warn('server.start_cancelled', {
+          errorCode: err.code || err.name || 'UNKNOWN'
+        });
+        if (!startupSettled) {
+          startupSettled = true;
+          reject(err);
+        }
+        return;
+      }
+      if (err.code === 'EADDRINUSE' &&
+          PORT < 65535 &&
+          portFallbackCount < APP_CONFIG.portFallbackAttempts) {
+        portFallbackCount++;
+        PORT++;
+        logger.warn('server.port_in_use', { port: PORT, attempt: portFallbackCount });
+        listenOnPort(PORT);
+      } else {
+        logger.error('server.start_failed', {
+          errorCode: err.code || err.name || 'UNKNOWN',
+          port: PORT
+        });
+        if (!startupSettled) {
+          startupSettled = true;
+          reject(err);
+        }
+      }
+    });
+
+    listenOnPort(PORT);
+  });
+}
+
+async function ensureLocalTlsAddress(address) {
+  if (isLocalTlsMaterialCurrent(localTlsMaterial, address)) return;
+  if (localTlsRefreshPromise) {
+    await localTlsRefreshPromise;
+    if (isLocalTlsMaterialCurrent(localTlsMaterial, address)) return;
+  }
+
+  localTlsRefreshPromise = (async () => {
+    const interfaces = os.networkInterfaces();
+    const addresses = listLocalIPv4Addresses(interfaces, address);
+    const updatedMaterial = await createLocalTlsMaterial({
+      userDataPath: app.getPath('userData'),
+      addresses
+    });
+    try {
+      httpServer.setSecureContext({
+        pfx: updatedMaterial.pfx,
+        passphrase: updatedMaterial.pfxPassphrase
+      });
+    } finally {
+      updatedMaterial.pfx.fill(0);
+    }
+    localTlsMaterial = updatedMaterial;
+    logger.info('tls.local_certificate_refreshed', {
+      rootFingerprint: updatedMaterial.rootFingerprint,
+      rootNotAfter: updatedMaterial.rootNotAfter,
+      leafFingerprint: updatedMaterial.leafFingerprint,
+      leafNotAfter: updatedMaterial.leafNotAfter,
+      subjectAlternativeNames: updatedMaterial.subjectAlternativeNames,
+      selectedAddress: address
+    });
+  })().finally(() => {
+    localTlsRefreshPromise = null;
+  });
+  await localTlsRefreshPromise;
 }
 
 function createWindow() {
@@ -510,23 +568,36 @@ app.whenReady().then(() => {
     }
     callback(-3);
   });
+  let startupStage = 'storage.directory_create';
   return fs.promises.mkdir(CAPTURES_DIR, { recursive: true })
-    .then(() => recoverCaptureStorage(CAPTURES_DIR, { temporaryFileTtlMs: 0 }))
+    .then(() => {
+      startupStage = 'storage.recovery';
+      return recoverCaptureStorage(CAPTURES_DIR, { temporaryFileTtlMs: 0 });
+    })
     .then(async (recovery) => {
+      startupStage = 'thumbnail.cleanup';
       await thumbnailCache.cleanup({ validCaptures: recovery.validCaptures });
+      startupStage = 'capture_quota.initialize';
       await captureStorageQuota.initialize();
-      const { removedTemporaryFiles, invalidCaptures } = recovery;
+      const { removedTemporaryFiles, invalidCaptures, orphanMetadata } = recovery;
       if (removedTemporaryFiles.length) {
         logger.info('storage.recovery_removed_temporary_files', {
           count: removedTemporaryFiles.length
         });
       }
       if (invalidCaptures.length) {
-        logger.warn('storage.recovery_removed_invalid_captures', {
+        logger.warn('storage.recovery_invalid_captures_preserved', {
           count: invalidCaptures.length
         });
       }
+      if (orphanMetadata.length) {
+        logger.warn('storage.recovery_orphan_metadata_preserved', {
+          count: orphanMetadata.length
+        });
+      }
+      startupStage = 'server.start';
       await createServer();
+      startupStage = 'dashboard.create';
       createWindow();
       logger.info('application.ready');
       app.on('activate', () => {
@@ -534,13 +605,19 @@ app.whenReady().then(() => {
       });
     })
     .catch((error) => {
-      logger.error('application.storage_initialization_failed', {
-        errorCode: error.code || error.name || 'UNKNOWN'
+      logger.error('application.startup_failed', {
+        stage: startupStage,
+        errorCode: error.code || error.name || 'UNKNOWN',
+        errorMessage: error.message || String(error),
+        stackTrace: error.stack || 'No stack trace available'
       });
+      dialog.showErrorBox(
+        'TETHER could not start',
+        `Startup failed during ${startupStage}.\n\n${error.message || 'Unknown startup error.'}\n\nSee the application log for diagnostic details.`
+      );
       app.quit();
     });
 });
-
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
@@ -703,6 +780,7 @@ ipcMain.handle('get-server-config', async (event, ...args) => {
   }
 
   const localIP = getLocalIP();
+  await ensureLocalTlsAddress(localIP);
   const mobileUrl = `https://${localIP}:${PORT}/mobile/#token=${pairingCredentials.token}`;
   
   // Generate QR Code as DataURL
@@ -722,6 +800,11 @@ ipcMain.handle('get-server-config', async (event, ...args) => {
     pairingTokenExpiresAt: pairingCredentials.expiresAt,
     certificatePin: localTlsMaterial?.certificatePin || '',
     certificateFingerprint: localTlsMaterial?.rootFingerprint || '',
+    certificateExpiresAt: localTlsMaterial?.leafNotAfter || '',
+    certificateAuthorityExpiresAt: localTlsMaterial?.rootNotAfter || '',
+    certificateSubjectAlternativeNames: localTlsMaterial?.subjectAlternativeNames || '',
+    certificateAuthorityRotated: localTlsMaterial?.certificateAuthorityRotated === true,
+    mobileAddress: `https://${localIP}:${PORT}/mobile/`,
     maxImageBytes: APP_CONFIG.uploadLimitBytes,
     qrCode: qrCodeDataUrl,
     capturesDir: CAPTURES_DIR

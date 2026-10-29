@@ -25,7 +25,10 @@ const SAFE_FIELDS = new Set([
   'queueSize',
   'filename',
   'count',
-  'attempt'
+  'attempt',
+  'stage',
+  'errorMessage',
+  'stackTrace'
 ]);
 
 let activeLevel = 'WARN';
@@ -49,7 +52,16 @@ function sanitizeFields(fields) {
   for (const [key, value] of Object.entries(fields)) {
     if (!SAFE_FIELDS.has(key) || value === undefined || value === null) continue;
     if (typeof value === 'string') {
-      const normalized = value.replace(/[\r\n\t]/g, ' ').slice(0, 160);
+      const maxLength = key === 'stackTrace' ? 1800 : key === 'errorMessage' ? 400 : 160;
+      let normalized = value.replace(/[\r\n\t]/g, ' ').slice(0, maxLength);
+      if (key === 'errorMessage' || key === 'stackTrace') {
+        normalized = normalized
+          .replace(/(?:[A-Za-z]:\\|\\\\)[^'"\r\n)]*/g, '[path]')
+          .replace(/https?:\/\/[^\s)]+/gi, '[url]')
+          .replace(/\b(token|secret|password|passphrase|authorization|api[_-]?key)\s*[:=]\s*[^\s,;]+/gi, '$1=[redacted]')
+          .replace(/\b[a-f0-9]{64}\b/gi, '[redacted]');
+      }
+      if (key === 'stage' && !/^[A-Za-z0-9_.-]{1,80}$/.test(normalized)) continue;
       if (key === 'captureId' &&
           !/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(normalized)) continue;
       if (key === 'authResult' && !/^(ACCEPTED|REJECTED)$/.test(normalized)) continue;

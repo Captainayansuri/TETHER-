@@ -303,6 +303,7 @@ async function recoverCaptureStorage(
   const removedTemporaryFiles = [];
   const invalidCaptures = [];
   const validCaptures = [];
+  const orphanMetadata = [];
 
   for (const entry of entries) {
     if (!entry.isFile() ||
@@ -370,8 +371,8 @@ async function recoverCaptureStorage(
       validCaptures.push({ captureId, sha256: captureDigest });
       continue;
     }
-    await removeIfPresent(fileSystem, imagePath);
-    await removeIfPresent(fileSystem, metadataPath);
+    // Keep unverified user files and metadata in place for manual recovery.
+    // They are excluded from the valid capture set and never served as images.
     invalidCaptures.push(captureId);
   }
 
@@ -384,11 +385,11 @@ async function recoverCaptureStorage(
       candidate.isFile() && candidate.name.toLowerCase().startsWith(`capture_${captureId}.`)
     );
     if (!hasCapture) {
-      await removeIfPresent(fileSystem, path.join(capturesDirectory, filename));
+      orphanMetadata.push(captureId);
     }
   }
 
-  return { removedTemporaryFiles, invalidCaptures, validCaptures };
+  return { removedTemporaryFiles, invalidCaptures, orphanMetadata, validCaptures };
 }
 
 async function syncDirectory(fileSystem, directory, platform = process.platform) {

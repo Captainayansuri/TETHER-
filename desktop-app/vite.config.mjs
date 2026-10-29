@@ -13,13 +13,15 @@ const appConfig = buildRuntimeConfig({
 });
 
 export default defineConfig({
+  root: path.resolve(__dirname, 'src'),
+  publicDir: path.resolve(__dirname, 'public'),
   base: './',
   server: {
     port: appConfig.dashboardDevPort,
     strictPort: true
   },
   build: {
-    outDir: 'dist',
+    outDir: path.resolve(__dirname, 'dist'),
     emptyOutDir: true,
     copyPublicDir: false,
     rollupOptions: {

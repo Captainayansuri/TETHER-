@@ -6,6 +6,7 @@ const path = require('path');
 const {
   cleanupAbandonedUploads,
   createUploadQueue,
+  createCaptureStorageQuota,
   getMaxQueuedUploads,
   DEFAULT_MAX_QUEUED_UPLOADS,
   recoverCaptureStorage,
@@ -15,6 +16,35 @@ const crypto = require('crypto');
 
 const CAPTURE_ID = 'e7384ed3-f66a-4caf-98e2-e6d26bc8f501';
 const SECOND_CAPTURE_ID = 'e7384ed3-f66a-4caf-98e2-e6d26bc8f502';
+
+test('capture storage quota initializes from existing files without altering user data', async (context) => {
+  const capturesDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'tether-quota-startup-'));
+  context.after(() => fs.rmSync(capturesDirectory, { recursive: true, force: true }));
+  const existingName = `capture_${CAPTURE_ID}.jpg`;
+  const existingBytes = Buffer.from('preserve existing capture bytes');
+  await fs.promises.writeFile(path.join(capturesDirectory, existingName), existingBytes);
+  const quota = createCaptureStorageQuota({ capturesDirectory, maxBytes: 1024 });
+
+  assert.equal(quota.reserve(CAPTURE_ID, 1), null, 'quota must not reserve before initialization');
+  assert.equal(await quota.initialize(), existingBytes.length);
+  const reservation = quota.reserve(SECOND_CAPTURE_ID, 10);
+  assert.ok(reservation);
+  reservation.release();
+  assert.deepEqual(await fs.promises.readFile(path.join(capturesDirectory, existingName)), existingBytes);
+});
+
+test('capture storage quota reports initialization failures without mutating the directory', async () => {
+  const error = Object.assign(new Error('permission denied'), { code: 'EACCES' });
+  const quota = createCaptureStorageQuota({
+    capturesDirectory: 'unavailable-captures-directory',
+    maxBytes: 1024,
+    fileSystem: { readdir: async () => { throw error; } }
+  });
+
+  await assert.rejects(quota.initialize(), { code: 'EACCES' });
+  assert.equal(quota.reserve(CAPTURE_ID, 1), null);
+  assert.equal(quota.usedBytes, 0);
+});
 
 function createWindowsPersistenceFileSystem({ failAt, failCode = 'EACCES' } = {}) {
   const events = [];
@@ -347,7 +377,7 @@ test('Windows interrupted metadata write is cleaned up and recovery keeps only a
   assert.ok(recovered.removedTemporaryFiles.some((name) => name.startsWith('.metadata_')));
 });
 
-test('startup recovery removes abandoned transfer files and keeps verified captures', async (context) => {
+test('startup recovery removes generated temp files and preserves verified and invalid user captures', async (context) => {
   const capturesDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'tether-recovery-'));
   context.after(() => fs.rmSync(capturesDirectory, { recursive: true, force: true }));
   const image = createJpeg();
@@ -387,11 +417,14 @@ test('startup recovery removes abandoned transfer files and keeps verified captu
   );
   assert.deepEqual(result.invalidCaptures, [SECOND_CAPTURE_ID]);
   assert.equal(fs.existsSync(path.join(capturesDirectory, savedFile)), true);
-  assert.equal(fs.existsSync(path.join(capturesDirectory, `capture_${SECOND_CAPTURE_ID}.jpg`)), false);
-  assert.equal(fs.existsSync(path.join(capturesDirectory, `.capture_${SECOND_CAPTURE_ID}.json`)), false);
+  assert.equal(await fs.promises.readFile(path.join(capturesDirectory, `capture_${SECOND_CAPTURE_ID}.jpg`), 'utf8'), 'partial');
+  assert.deepEqual(
+    JSON.parse(await fs.promises.readFile(path.join(capturesDirectory, `.capture_${SECOND_CAPTURE_ID}.json`), 'utf8')),
+    { ...metadata, captureId: SECOND_CAPTURE_ID, size: 7 }
+  );
 });
 
-test('startup removes orphan metadata and rejects a committed image with a mismatching digest', async (context) => {
+test('startup preserves orphan metadata and rejects a committed image with a mismatching digest', async (context) => {
   const capturesDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'tether-recovery-'));
   context.after(() => fs.rmSync(capturesDirectory, { recursive: true, force: true }));
   const image = createJpeg();
@@ -414,7 +447,8 @@ test('startup removes orphan metadata and rejects a committed image with a misma
 
   const result = await recoverCaptureStorage(capturesDirectory, { temporaryFileTtlMs: 0 });
   assert.deepEqual(result.invalidCaptures, [CAPTURE_ID]);
-  assert.equal(fs.existsSync(path.join(capturesDirectory, `capture_${CAPTURE_ID}.jpg`)), false);
-  assert.equal(fs.existsSync(path.join(capturesDirectory, `.capture_${CAPTURE_ID}.json`)), false);
-  assert.equal(fs.existsSync(path.join(capturesDirectory, `.capture_${orphanMetadataId}.json`)), false);
+  assert.deepEqual(result.orphanMetadata, [orphanMetadataId]);
+  assert.deepEqual(await fs.promises.readFile(path.join(capturesDirectory, `capture_${CAPTURE_ID}.jpg`)), image);
+  assert.equal(fs.existsSync(path.join(capturesDirectory, `.capture_${CAPTURE_ID}.json`)), true);
+  assert.equal(fs.existsSync(path.join(capturesDirectory, `.capture_${orphanMetadataId}.json`)), true);
 });
