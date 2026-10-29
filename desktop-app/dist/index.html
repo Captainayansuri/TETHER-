@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TETHER</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script type="module" crossorigin src="./assets/index-BVawKuYc.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-DJJsrcwV.css">
+  </head>
+  <body>
+    <div id="root"></div>
+    <section id="renderer-error" role="alert" hidden style="max-width:36rem;margin:12vh auto;padding:2rem;border:1px solid #334155;border-radius:12px;background:#111827;color:#f8fafc;font:16px/1.5 system-ui,sans-serif">
+      <h1 style="margin-top:0">TETHER could not start</h1>
+      <p>The dashboard did not finish loading. Restart TETHER and check its application logs for renderer errors.</p>
+    </section>
+    <script>
+      (() => {
+        const showError = () => {
+          const root = document.getElementById('root');
+          if (root && root.childElementCount === 0) {
+            document.getElementById('renderer-error').hidden = false;
+          }
+        };
+        window.addEventListener('error', (event) => {
+          if (event instanceof ErrorEvent) showError();
+        });
+        window.addEventListener('unhandledrejection', showError);
+        window.setTimeout(showError, 15000);
+      })();
+    </script>
+    <script src="./pairing-ui.js"></script>
+  </body>
+</html>

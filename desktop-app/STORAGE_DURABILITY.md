@@ -1,0 +1,9 @@
+﻿# Capture storage durability
+
+Capture data and its metadata are written to uniquely named temporary files in the capture directory. The app flushes each file handle with `FileHandle.sync()` and closes it before committing with a same-directory atomic rename. Image IDs are reserved by the shared upload queue, so publication does not need a placeholder destination. This avoids Windows `EPERM` when attempting to rename over an exclusive empty placeholder while preserving the capture ID, size, image-type, and SHA-256 checks.
+
+On Windows, Node.js does not provide a supported portable way to flush a directory handle. The app therefore skips directory-handle synchronization on Windows. File contents are still flushed before rename, and saves are atomic during normal operation on a local filesystem. The app cannot guarantee that the directory entry created by rename survives sudden power loss or a kernel crash. Startup recovery checks stored files and metadata, removes incomplete temporary files, and rejects mismatched captures; it cannot restore a directory entry lost during a power failure.
+
+On platforms/filesystems where directory synchronization is supported, the app also flushes the capture directory after a metadata commit. If opening or synchronizing the directory fails with a known unsupported-operation error, it emits one `storage.directory_sync_unavailable` warning classified by operation. Permission errors such as `EACCES`/`EPERM`, and other I/O failures, are surfaced as save failures rather than treated as unsupported behavior.
+
+Windows limitation detail: the previous implementation attempted `fileSystem.open(capturesDirectory, 'r')` and then `handle.sync()`. On the Windows host used for this change, opening the directory succeeded and `handle.sync()` failed with `EPERM` from the `fsync` operation. The Windows path now skips the unsupported directory-handle sync entirely.

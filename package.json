@@ -1,0 +1,10 @@
+{
+  "name": "image-tether-test-suite",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Unified desktop, Android, and browser receiver test command",
+  "scripts": {
+    "test": "node test-all.js",
+    "stress": "node desktop-app/stress/run-stress.js"
+  }
+}

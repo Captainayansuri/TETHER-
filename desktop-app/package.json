@@ -1,0 +1,100 @@
+{
+  "name": "image-tether-desktop",
+  "version": "1.0.0",
+  "description": "TETHER image-tethering desktop application",
+  "productName": "TETHER",
+  "author": "TETHER",
+  "license": "UNLICENSED",
+  "main": "main.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "node build-dashboard.js",
+    "preview": "vite preview",
+    "start": "npm run build && node launch-electron.js",
+    "test": "node --test --test-isolation=none --test-concurrency=1 test/*.test.js",
+    "release:win": "npm run build && electron-builder --win nsis --x64",
+    "pack:win": "npm run build && electron-builder --win nsis --x64 --dir",
+    "dist:win": "npm run build && electron-builder --win nsis --x64"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "qrcode": "^1.5.3",
+    "sharp": "^0.35.5",
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "electron": "^44.10.0",
+    "electron-builder": "^26.15.3",
+    "vite": "^8.3.4"
+  },
+  "build": {
+    "appId": "com.imagetether.desktop",
+    "productName": "TETHER",
+    "electronVersion": "44.10.0",
+    "asar": true,
+    "directories": {
+      "buildResources": "build",
+      "output": "release"
+    },
+    "files": [
+      "main.js",
+      "runtime-config.js",
+      "graceful-shutdown.js",
+      "logger.js",
+      "electron-security.js",
+      "http-app.js",
+      "capture-files.js",
+      "copy-capture-image.js",
+      "pairing-auth.js",
+      "image-storage.js",
+      "connection-registry.js",
+      "image-transfer.js",
+      "image-thumbnails.js",
+      "local-tls.js",
+      "preload.js",
+      "public/**/*",
+      "dist/**/*",
+      "build/app-icon.ico",
+      "package.json",
+      "!test/**",
+      "!node_modules/.cache/**",
+      "!vite.config.*",
+      "!build/**",
+      "!build/app-icon.ico"
+    ],
+    "asarUnpack": [
+      "**/*.node"
+    ],
+    "npmRebuild": true,
+    "buildDependenciesFromSource": false,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/app-icon.ico",
+      "legalTrademarks": "TETHER",
+      "requestedExecutionLevel": "asInvoker",
+      "signAndEditExecutable": true,
+      "artifactName": "${productName}-Setup-${version}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "TETHER",
+      "menuCategory": "TETHER",
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": true,
+      "installerLanguages": [
+        "en_US"
+      ]
+    }
+  }
+}
