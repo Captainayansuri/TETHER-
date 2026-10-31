@@ -16,7 +16,11 @@ async function build() {
   await fs.mkdir(staged, { recursive: true });
   await copyAsset('app-dashboard.js');
   await copyAsset('app-dashboard.css');
+  await copyAsset('figma-dashboard.css');
   await copyAsset('pairing-ui.js');
+  await copyAsset('hosted-preview.js');
+  await copyAsset('figma-ui.js');
+  await fs.cp(path.join(source, 'figma-assets'), path.join(staged, 'figma-assets'), { recursive: true });
   await fs.cp(path.join(source, 'mobile'), path.join(staged, 'mobile'), { recursive: true });
   await fs.copyFile(path.join(root, 'index.html'), path.join(staged, 'index.html'));
   const result = spawnSync(process.execPath, [

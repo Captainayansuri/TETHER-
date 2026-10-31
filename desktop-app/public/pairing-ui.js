@@ -7,6 +7,8 @@
   let imageObserver;
   let cardObserver;
   let refreshTimer;
+  let latestServerConfig = null;
+  let launchButtonWithHandler = null;
   const clients = new Map();
   const clientEventRevision = new Map();
   const eventUnsubscribers = [];
@@ -46,6 +48,9 @@
 
     for (const client of records) {
       const item = document.createElement('li');
+      item.className = client.state === 'CONNECTED' || client.state === 'TRANSFERRING'
+        ? 'client-device connected'
+        : 'client-device disconnected';
       item.style.cssText = 'display:grid;grid-template-columns:1fr auto;gap:0.25rem 1rem;padding:0.75rem;border-top:1px solid rgba(255,255,255,0.08);list-style:none;';
       const identity = document.createElement('strong');
       identity.textContent = `${client.name} · ${client.platform}`;
@@ -188,14 +193,39 @@
     try {
       const config = await window.electronAPI.getServerConfig();
       if (disposed) return;
+      latestServerConfig = config;
       card.querySelector('.pairing-auth-error')?.remove();
       const qrCode = card.querySelector('.qr-image');
       if (qrCode && qrCode.src !== config.qrCode) qrCode.src = config.qrCode;
       const serverAddress = card.querySelector('.ip-text');
       if (serverAddress && config.mobileAddress) serverAddress.textContent = config.mobileAddress;
+      const endpointLabel = [...document.querySelectorAll('.setting-label')]
+        .find((element) => element.textContent.trim() === 'Local Connection Endpoint');
+      const endpoint = endpointLabel?.parentElement?.querySelector('.setting-value');
+      if (endpoint && config.ip && Number.isInteger(config.port)) {
+        endpoint.textContent = `${config.ip}:${config.port}`;
+      }
+      const launchButton = [...document.querySelectorAll('button')]
+        .find((element) => element.textContent.includes('Launch Web Receiver'));
+      if (launchButton && launchButton !== launchButtonWithHandler) {
+        launchButtonWithHandler = launchButton;
+        launchButton.addEventListener('click', (event) => {
+          if (!latestServerConfig?.mobileAddress || !latestServerConfig.pairingToken) return;
+          event.preventDefault();
+          event.stopPropagation();
+          const mobileUrl = new URL(latestServerConfig.mobileAddress);
+          mobileUrl.hash = `token=${latestServerConfig.pairingToken}`;
+          window.electronAPI.openExternal(mobileUrl.href).catch((error) => {
+            console.error('Could not open the current mobile receiver URL:', error?.code || error?.name || 'UNKNOWN');
+          });
+        });
+      }
       const instructions = card.querySelectorAll('p');
       if (instructions.length > 0) {
-        instructions[0].textContent = 'Android Chrome: install and verify the TETHER CA once, then scan the QR. It opens this HTTPS URL with the temporary pairing token. Native Android: install the CA, then enter the IP:port from Device Details, pairing token, and pin.';
+        instructions[0].textContent = 'Scan to Pair';
+        if (instructions[1]) {
+          instructions[1].textContent = 'Same Wi-Fi. Install the TETHER trust certificate once.';
+        }
       }
 
       let details = card.querySelector('.pairing-auth-details');

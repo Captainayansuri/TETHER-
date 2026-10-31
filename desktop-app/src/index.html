@@ -7,11 +7,21 @@
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="./app-dashboard.css">
+    <link rel="stylesheet" href="./figma-dashboard.css">
   </head>
   <body>
     <div id="root"></div>
+    <aside id="hosted-preview-notice" hidden role="status" aria-live="polite" style="position:fixed;right:1rem;bottom:1rem;z-index:1000;max-width:28rem;padding:1rem 1.25rem;border:1px solid #38bdf8;border-radius:12px;background:#131b2e;color:#f8fafc;box-shadow:0 12px 32px #0008;font:500 0.9rem/1.5 system-ui,sans-serif">
+      <strong>Hosted preview — desktop connection unavailable.</strong>
+      <span>This Vercel page cannot access Electron, your PC's local server, or local captures. Pairing and image transfers require the TETHER desktop app.</span>
+    </aside>
+    <aside id="desktop-config-error" hidden role="alert" aria-live="assertive" style="position:fixed;right:1rem;bottom:1rem;z-index:1000;max-width:28rem;padding:1rem 1.25rem;border:1px solid #f87171;border-radius:12px;background:#131b2e;color:#f8fafc;box-shadow:0 12px 32px #0008;font:500 0.9rem/1.5 system-ui,sans-serif">
+      <strong>Desktop connection profile unavailable.</strong>
+      <span>Check that TETHER finished starting its local server, then retry.</span>
+      <button id="desktop-config-retry" type="button" style="display:block;margin-top:.75rem;padding:.5rem .8rem;border:0;border-radius:7px;background:#38bdf8;color:#0b0f19;font:600 .9rem system-ui,sans-serif;cursor:pointer">Retry</button>
+    </aside>
     <section id="renderer-error" role="alert" hidden style="max-width:36rem;margin:12vh auto;padding:2rem;border:1px solid #334155;border-radius:12px;background:#111827;color:#f8fafc;font:16px/1.5 system-ui,sans-serif">
       <h1 style="margin-top:0">TETHER could not start</h1>
       <p>The dashboard did not finish loading. Restart TETHER and check its application logs for renderer errors.</p>
@@ -31,7 +41,9 @@
         window.setTimeout(showError, 15000);
       })();
     </script>
+    <script type="module" src="./hosted-preview.js"></script>
     <script type="module" src="./app-dashboard.js"></script>
     <script type="module" src="./pairing-ui.js"></script>
+    <script type="module" src="./figma-ui.js"></script>
   </body>
 </html>

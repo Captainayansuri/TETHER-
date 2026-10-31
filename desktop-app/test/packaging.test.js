@@ -71,6 +71,8 @@ test('release includes runtime, preload, server and dashboard assets inside app.
   const viteConfig = fs.readFileSync(path.join(desktopDirectory, 'vite.config.mjs'), 'utf8');
   assert.match(dashboardHtml, /<script type="module" src="\.\/app-dashboard\.js"><\/script>/);
   assert.match(dashboardHtml, /<script type="module" src="\.\/pairing-ui\.js"><\/script>/);
+  assert.match(dashboardHtml, /id="hosted-preview-notice"/);
+  assert.match(dashboardHtml, /type="module" src="\.\/hosted-preview\.js"/);
   assert.match(viteConfig, /root: path\.resolve\(__dirname, 'src'\)/);
   assert.match(main, /getAppAssetPath\('public', 'mobile'\)/);
   assert.match(main, /userDataPath:\s*app\.getPath\('userData'\)/);
@@ -87,6 +89,7 @@ test('dashboard build inputs use local relative assets and Windows icon is valid
   const buildScript = fs.readFileSync(path.join(desktopDirectory, 'build-dashboard.js'), 'utf8');
   assert.match(buildScript, /replaceAll\('\.\.\/assets\//);
   assert.match(buildScript, /copyAsset\('pairing-ui\.js'\)/);
+  assert.match(buildScript, /copyAsset\('hosted-preview\.js'\)/);
   assert.match(buildScript, /path\.join\(output, 'mobile'\)/);
 
   const icon = fs.readFileSync(path.join(desktopDirectory, 'build', 'app-icon.ico'));

@@ -24,6 +24,9 @@ class TlsPinningTest {
             createPinnedOkHttpClient("ws://192.168.1.15:8080", validPin)
         }
         assertThrows(IllegalArgumentException::class.java) {
+            createPinnedOkHttpClient("https://192.168.1.15:8080", validPin)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
             createPinnedOkHttpClient("wss://192.168.1.15:8080", "sha256/bad")
         }
     }

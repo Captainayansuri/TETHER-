@@ -11,13 +11,15 @@ internal fun normalizeCertificatePin(value: String): String? {
 }
 
 internal fun createPinnedOkHttpClient(serverUrl: String, certificatePin: String): OkHttpClient {
-    val url = serverUrl.toHttpUrlOrNull()
+    require(serverUrl.startsWith("wss://", ignoreCase = true)) {
+        "Secure WebSocket transport is required"
+    }
+    val httpsUrl = "https://${serverUrl.substringAfter("://")}".toHttpUrlOrNull()
         ?: throw IllegalArgumentException("Invalid desktop server URL")
-    require(url.isHttps) { "Secure WebSocket transport is required" }
     val pin = normalizeCertificatePin(certificatePin)
         ?: throw IllegalArgumentException("Invalid TETHER certificate pin")
     val certificatePinner = CertificatePinner.Builder()
-        .add(url.host, pin)
+        .add(httpsUrl.host, pin)
         .build()
     return OkHttpClient.Builder()
         .certificatePinner(certificatePinner)

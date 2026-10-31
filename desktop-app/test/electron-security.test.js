@@ -147,6 +147,9 @@ test('Electron main and preload keep renderer privileges constrained', () => {
   assert.match(dashboardAdapter, /LocalSubnet/);
   assert.match(dashboardAdapter, /pairing-tls-sans/);
   assert.match(dashboardAdapter, /config\.mobileAddress/);
+  assert.match(dashboardAdapter, /Local Connection Endpoint/);
+  assert.match(dashboardAdapter, /mobileUrl\.hash = `token=\$\{latestServerConfig\.pairingToken\}`/);
+  assert.match(dashboardAdapter, /openExternal\(mobileUrl\.href\)/);
   assert.match(dashboardAdapter, /certificatePin/);
   assert.match(tlsHelper, /New-SelfSignedCertificate/);
   assert.ok(packageManifest.build.files.includes('local-tls.js'));
